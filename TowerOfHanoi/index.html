@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower of Hanoi Animation</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            background-color: #f5f5f5;
+            margin-top: 40px;
+        }
+        .controls {
+            background: white;
+            padding: 15px 25px;
+            border-radius: 8px;
+            box-shadow: 0 2px 5px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        input[type="number"] {
+            width: 50px;
+            padding: 5px;
+            margin: 0 10px;
+        }
+        button {
+            padding: 7px 15px;
+            background-color: #2196F3;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover {
+            background-color: #1976D2;
+        }
+        canvas {
+            background-color: white;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.15);
+            border-radius: 4px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <label for="diskCount">Enter number of disks (3-8): </label>
+        <input type="number" id="diskCount" min="3" max="8" value="4">
+        <button onclick="initHanoi()">Start Animation</button>
+    </div>
+
+    <canvas id="hanoiCanvas" width="700" height="400"></canvas>
+
+    <script>
+        const canvas = document.getElementById('hanoiCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let pegs = [[], [], []];
+        let moves = [];
+        let moveIndex = 0;
+        let numDisks = 0;
+        let animationTimer = null;
+        
+        const delayMs = 1000; // Animation delay
+        
+        const diskColors = [
+            "#4CAF50", "#2196F3", "#FF9800", "#9C27B0", 
+            "#F44336", "#3F51B5", "#00BCD4", "#8BC34A"
+        ];
+
+        function initHanoi() {
+            // Stop any existing animation
+            if (animationTimer) {
+                clearInterval(animationTimer);
+            }
+
+            // Get and clamp input
+            let inputVal = parseInt(document.getElementById('diskCount').value, 10);
+            numDisks = Math.max(3, Math.min(8, inputVal || 3));
+            document.getElementById('diskCount').value = numDisks;
+
+            // Initialize pegs
+            pegs = [[], [], []];
+            for (let size = numDisks; size >= 1; size--) {
+                pegs[0].push(size);
+            }
+
+            // Generate moves
+            moves = [];
+            moveIndex = 0;
+            generateMoves(numDisks, 0, 2, 1);
+
+            // Draw initial state
+            drawPanel();
+
+            // Start animation (with initial 300ms delay equivalent)
+            setTimeout(() => {
+                animationTimer = setInterval(stepAnimation, delayMs);
+            }, 300);
+        }
+
+        function generateMoves(n, from, to, aux) {
+            if (n === 0) return;
+            generateMoves(n - 1, from, aux, to);
+            moves.push({ disk: n, from: from, to: to });
+            generateMoves(n - 1, aux, to, from);
+        }
+
+        function stepAnimation() {
+            if (moveIndex >= moves.length) {
+                clearInterval(animationTimer);
+                return;
+            }
+
+            const m = moves[moveIndex++];
+            
+            if (pegs[m.from].length === 0) {
+                console.error("Invalid move: source empty");
+            } else {
+                const disk = pegs[m.from].pop();
+                pegs[m.to].push(disk);
+            }
+            
+            drawPanel();
+        }
+
+        // Helper to draw rounded rectangles
+        function roundRect(ctx, x, y, width, height, radius) {
+            ctx.beginPath();
+            ctx.moveTo(x + radius, y);
+            ctx.lineTo(x + width - radius, y);
+            ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+            ctx.lineTo(x + width, y + height - radius);
+            ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+            ctx.lineTo(x + radius, y + height);
+            ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+            ctx.lineTo(x, y + radius);
+            ctx.quadraticCurveTo(x, y, x + radius, y);
+            ctx.closePath();
+        }
+
+        function drawPanel() {
+            const w = canvas.width;
+            const h = canvas.height;
+
+            // Clear background
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, w, h);
+
+            const pegWidth = 8;
+            const baseY = h - 40;
+            const pegX = [w / 6, w / 2, w * 5 / 6];
+
+            // Draw bases and pegs
+            ctx.fillStyle = "darkgray";
+            for (let i = 0; i < 3; i++) {
+                ctx.fillRect(pegX[i] - w / 12, baseY + 10, w / 6, 8); // base
+                ctx.fillRect(pegX[i] - pegWidth / 2, baseY - 200, pegWidth, 200); // peg
+            }
+
+            const maxDiskWidth = w / 5;
+            const minDiskWidth = 30;
+            const diskHeight = Math.max(16, (baseY - (baseY - 200)) / Math.max(6, numDisks));
+
+            // Draw disks on each peg
+            for (let i = 0; i < 3; i++) {
+                const stack = pegs[i];
+                for (let depth = 0; depth < stack.length; depth++) {
+                    const diskSize = stack[depth];
+                    
+                    const widthDisk = minDiskWidth + (diskSize - 1) * ((maxDiskWidth - minDiskWidth) / Math.max(1, numDisks - 1));
+                    const x = pegX[i] - widthDisk / 2;
+                    const y = baseY - (depth + 1) * diskHeight;
+
+                    // Setup disk drawing
+                    ctx.fillStyle = diskColors[(diskSize - 1) % diskColors.length];
+                    ctx.strokeStyle = "black";
+                    ctx.lineWidth = 1;
+
+                    // Fill and stroke rounded rectangle
+                    roundRect(ctx, x, y, widthDisk, diskHeight - 2, 10);
+                    ctx.fill();
+                    ctx.stroke();
+
+                    // Draw disk label
+                    ctx.fillStyle = "white";
+                    ctx.font = "bold 12px Arial";
+                    ctx.textAlign = "center";
+                    ctx.textBaseline = "middle";
+                    
+                    const label = diskSize.toString();
+                    ctx.fillText(label, pegX[i], y + (diskHeight - 2) / 2);
+                }
+            }
+        }
+
+        // Draw initial blank state on load
+        drawPanel();
+    </script>
+</body>
+</html>
