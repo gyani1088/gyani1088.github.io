@@ -26,6 +26,7 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     table.appendChild(trHeader);
 
+    
     // Left Axis & DP Matrix
     for (let i = 0; i <= n; i++) {
         const tr = document.createElement("tr");
