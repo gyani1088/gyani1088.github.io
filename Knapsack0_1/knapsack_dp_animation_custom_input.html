@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>0/1 Knapsack DP Visualization</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f8fafc; }
+        .dp-cell { transition: all 0.3s ease; }
+        .highlight-active { background-color: #fef08a !important; transform: scale(1.02); border: 2px solid #ca8a04 !important; z-index: 10; }
+        .highlight-exclude { background-color: #fbcfe8 !important; border: 2px dashed #db2777 !important; }
+        .highlight-include { background-color: #bbf7d0 !important; border: 2px dashed #16a34a !important; }
+        .highlight-final { background-color: #86efac !important; border: 2px solid #16a34a !important; animation: pulse 2s infinite; }
+        
+        @keyframes pulse {
+            0%, 100% { box-shadow: 0 0 0 0 rgba(22, 163, 74, 0.4); }
+            50% { box-shadow: 0 0 0 10px rgba(22, 163, 74, 0); }
+        }
+        
+        /* Custom scrollbar for table container */
+        .table-container::-webkit-scrollbar { height: 8px; width: 8px; }
+        .table-container::-webkit-scrollbar-track { background: #f1f1f1; border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        .table-container::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+    </style>
+</head>
+<body class="min-h-screen p-4 flex flex-col">
+
+    <div class="max-w-7xl mx-auto w-full bg-white rounded-xl shadow-lg p-6 flex-1 flex flex-col">
+        <!-- Input Section -->
+        <div class="bg-gray-50 p-4 rounded-lg border border-gray-200 mb-6 flex flex-col md:flex-row gap-4 items-end">
+            <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Values (comma-separated)</label>
+                <input type="text" id="input-values" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" value="10, 40, 30, 50">
+            </div>
+            <div class="flex-1">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Weights (comma-separated)</label>
+                <input type="text" id="input-weights" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" value="5, 4, 6, 3">
+            </div>
+            <div class="w-full md:w-32">
+                <label class="block text-sm font-medium text-gray-700 mb-1">Capacity (W)</label>
+                <input type="number" id="input-w" class="w-full border-gray-300 rounded-md shadow-sm focus:border-blue-500 focus:ring-blue-500 p-2 border" value="10" min="1" max="30">
+            </div>
+            <button id="btn-apply" class="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 font-semibold transition shadow whitespace-nowrap">Apply Custom Data</button>
+        </div>
+
+        <!-- Header & Controls -->
+        <div class="flex flex-col md:flex-row justify-between items-center border-b pb-4 mb-4 gap-4">
+            <div>
+                <h1 class="text-2xl font-bold text-gray-800">0/1 Knapsack DP Animation</h1>
+                <p class="text-sm text-gray-500 mt-1" id="subtitle-info">Capacity (W) = 10 | Items = 4</p>
+            </div>
+            <div class="flex gap-2">
+                <button id="btn-reset" class="px-4 py-2 bg-gray-200 text-gray-700 rounded hover:bg-gray-300 font-semibold transition">Reset</button>
+                <button id="btn-prev" class="px-4 py-2 bg-blue-100 text-blue-700 rounded hover:bg-blue-200 font-semibold transition">Previous</button>
+                <button id="btn-next" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 font-semibold transition shadow">Next Step</button>
+                <button id="btn-play" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 font-semibold transition shadow w-24">Play</button>
+            </div>
+        </div>
+
+        <!-- Status Panel -->
+        <div id="status-panel" class="bg-gray-50 border border-gray-200 rounded-lg p-4 mb-6 min-h-[100px] flex flex-col justify-center">
+            <h3 class="font-bold text-gray-700 mb-1" id="status-title">Initialization</h3>
+            <p class="text-gray-600 text-sm" id="status-text">Base cases initialized. First row (capacity 0) and first column (0 items) are set to Value 0. Click 'Next Step' to start calculations.</p>
+        </div>
+
+        <!-- Table Container -->
+        <div class="table-container overflow-auto border border-gray-300 rounded-lg shadow-inner flex-1 relative">
+            <table class="w-full text-left border-collapse min-w-max">
+                <thead id="dp-head" class="bg-gray-100 sticky top-0 z-20 shadow-sm">
+                    <!-- Generated via JS -->
+                </thead>
+                <tbody id="dp-body" class="bg-white">
+                    <!-- Generated via JS -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        // Data derived from the Java Knapsack problem
+        let values = [10, 40, 30, 50];
+        let weights = [5, 4, 6, 3];
+        let W = 10;
+        let n = values.length;
+        let maxVal = Math.max(...values); // For progress bar scaling
+
+        // State objects
+        let dp = [];
+        let calculationSteps = [];
+        let currentStepIndex = -1;
+        let isPlaying = false;
+        let playInterval = null;
+
+        // Initialize and pre-calculate all steps
+        function initializeDP() {
+            dp = Array(n + 1).fill().map(() => Array(W + 1).fill(null));
+            calculationSteps = [];
+
+            // Initialize Base Cases (Row 0 and Col 0)
+            for (let i = 0; i <= n; i++) {
+                for (let j = 0; j <= W; j++) {
+                    if (i === 0 || j === 0) {
+                        dp[i][j] = { v: 0, w: [] };
+                    }
+                }
+            }
+
+            // Generate sequence of calculation steps
+            for (let i = 1; i <= n; i++) {
+                for (let j = 1; j <= W; j++) {
+                    const itemWt = weights[i - 1];
+                    const itemVal = values[i - 1];
+                    
+                    const excludeState = dp[i - 1][j];
+                    const excludeVal = excludeState.v;
+                    const excludeWts = [...excludeState.w];
+
+                    const fits = itemWt <= j;
+                    let includeVal = -1;
+                    let includeWts = [];
+                    let includeRefCol = -1;
+
+                    if (fits) {
+                        includeRefCol = j - itemWt;
+                        const prevState = dp[i - 1][includeRefCol];
+                        includeVal = itemVal + prevState.v;
+                        includeWts = [...prevState.w, itemWt];
+                    }
+
+                    // Decision logic: Math.max
+                    let chosenState;
+                    if (includeVal > excludeVal) {
+                        chosenState = { v: includeVal, w: includeWts };
+                    } else {
+                        chosenState = { v: excludeVal, w: excludeWts };
+                    }
+
+                    dp[i][j] = chosenState;
+
+                    calculationSteps.push({
+                        r: i,
+                        c: j,
+                        itemWt: itemWt,
+                        itemVal: itemVal,
+                        fits: fits,
+                        excludeRef: { r: i - 1, c: j, v: excludeVal },
+                        includeRef: fits ? { r: i - 1, c: includeRefCol, v: includeVal } : null,
+                        chosen: chosenState
+                    });
+                }
+            }
+        }
+
+        // Create the HTML structure for the DP Table
+        function buildTableGrid() {
+            const thead = document.getElementById('dp-head');
+            const tbody = document.getElementById('dp-body');
+            thead.innerHTML = '';
+            tbody.innerHTML = '';
+
+            // Build Header Row
+            const trHead = document.createElement('tr');
+            trHead.innerHTML = `<th class="p-3 border-r border-gray-300 min-w-[200px] text-center sticky left-0 bg-gray-100 z-10">Items \\ Capacity</th>`;
+            for (let j = 0; j <= W; j++) {
+                trHead.innerHTML += `<th class="p-3 border-r border-gray-300 min-w-[120px] text-center">W = ${j}</th>`;
+            }
+            thead.appendChild(trHead);
+
+            // Build Body Rows
+            for (let i = 0; i <= n; i++) {
+                const tr = document.createElement('tr');
+                tr.className = "border-b border-gray-200";
+                
+                // Item details column (Sticky left)
+                let itemHeaderHtml = '';
+                if (i === 0) {
+                    itemHeaderHtml = `<div class="font-semibold text-gray-500 text-center">Base Case<br>(0 Items)</div>`;
+                } else {
+                    const w = weights[i-1];
+                    const v = values[i-1];
+                    const wPct = (w / W) * 100;
+                    const vPct = (v / maxVal) * 100;
+
+                    itemHeaderHtml = `
+                        <div class="font-bold text-sm mb-2">Item ${i}</div>
+                        <!-- Weight Progress -->
+                        <div class="flex justify-between text-xs text-gray-600 mb-1">
+                            <span>Wt: ${w}</span><span>Max: ${W}</span>
+                        </div>
+                        <div class="w-full bg-gray-200 h-1.5 rounded mb-2">
+                            <div class="bg-blue-500 h-1.5 rounded" style="width: ${wPct}%"></div>
+                        </div>
+                        <!-- Value Progress -->
+                        <div class="flex justify-between text-xs text-gray-600 mb-1">
+                            <span>Val: ${v}</span>
+                        </div>
+                        <div class="w-full bg-gray-200 h-1.5 rounded">
+                            <div class="bg-emerald-500 h-1.5 rounded" style="width: ${vPct}%"></div>
+                        </div>
+                    `;
+                }
+
+                tr.innerHTML = `<td class="p-3 border-r border-gray-300 bg-gray-50 sticky left-0 z-10 shadow-[2px_0_5px_-2px_rgba(0,0,0,0.1)]">${itemHeaderHtml}</td>`;
+
+                // DP Cells
+                for (let j = 0; j <= W; j++) {
+                    tr.innerHTML += `<td id="cell-${i}-${j}" class="p-2 border-r border-gray-200 dp-cell text-center align-middle bg-white"></td>`;
+                }
+                tbody.appendChild(tr);
+            }
+        }
+
+        // Calculate sum of array elements
+        const sumArray = (arr) => arr.reduce((a, b) => a + b, 0);
+
+        // Render the contents of a cell based on state
+        function renderCellContent(i, j, state, isCalculated) {
+            const cell = document.getElementById(`cell-${i}-${j}`);
+            
+            // Clear previous highlight classes
+            cell.classList.remove('highlight-active', 'highlight-exclude', 'highlight-include', 'highlight-final');
+            
+            if (!isCalculated && i !== 0 && j !== 0) {
+                cell.innerHTML = '';
+                return;
+            }
+
+            const wtsSum = sumArray(state.w);
+            const wtsPct = W > 0 ? (wtsSum / W) * 100 : 0;
+            const wtsDisplay = state.w.length > 0 ? state.w.join(', ') : 'None';
+
+            cell.innerHTML = `
+                <div class="font-bold text-gray-800 text-lg leading-tight">Val: ${state.v}</div>
+                <div class="text-xs text-gray-500 mt-1 mb-1 font-mono tracking-tighter">Wts: [${wtsDisplay}]</div>
+                <div class="w-full bg-gray-200 h-1.5 rounded mt-auto flex" title="Capacity Used: ${wtsSum}/${W}">
+                    <div class="bg-purple-600 h-1.5 rounded" style="width: ${wtsPct}%"></div>
+                </div>
+            `;
+        }
+
+        // Main rendering function that syncs UI with currentStepIndex
+        function updateUI() {
+            // Render all cells up to the current state
+            for (let i = 0; i <= n; i++) {
+                for (let j = 0; j <= W; j++) {
+                    let isCalculated = false;
+                    let stateToRender = null;
+
+                    if (i === 0 || j === 0) {
+                        isCalculated = true;
+                        stateToRender = dp[i][j];
+                    } else {
+                        // Check if this cell has been calculated in our steps
+                        const stepIndexForCell = calculationSteps.findIndex(s => s.r === i && s.c === j);
+                        if (stepIndexForCell !== -1 && stepIndexForCell <= currentStepIndex) {
+                            isCalculated = true;
+                            stateToRender = calculationSteps[stepIndexForCell].chosen;
+                        }
+                    }
+
+                    renderCellContent(i, j, stateToRender, isCalculated);
+                }
+            }
+
+            // Handle Highlights and Status Panel based on current step
+            const statusTitle = document.getElementById('status-title');
+            const statusText = document.getElementById('status-text');
+
+            if (currentStepIndex === -1) {
+                statusTitle.innerText = "Initialization";
+                statusText.innerText = "Base cases initialized. First row (capacity 0) and first column (0 items) are set to Value 0.";
+            } 
+            else if (currentStepIndex < calculationSteps.length) {
+                const step = calculationSteps[currentStepIndex];
+                
+                // Highlight active calculation cell
+                const activeCell = document.getElementById(`cell-${step.r}-${step.c}`);
+                activeCell.classList.add('highlight-active');
+                
+                // Scroll into view if needed (centering it approximately)
+                activeCell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'center' });
+
+                // Highlight Exclude Reference
+                document.getElementById(`cell-${step.excludeRef.r}-${step.excludeRef.c}`).classList.add('highlight-exclude');
+
+                // Determine Inclusion Details
+                let includeHtml = '';
+                if (step.fits) {
+                    document.getElementById(`cell-${step.includeRef.r}-${step.includeRef.c}`).classList.add('highlight-include');
+                    includeHtml = `<span class="text-green-600 font-semibold">Include Item:</span> Fits! Value = ${step.itemVal} + dp[${step.includeRef.r}][${step.includeRef.c}](${step.includeRef.v - step.itemVal}) = <strong>${step.includeRef.v}</strong>.`;
+                } else {
+                    includeHtml = `<span class="text-red-500 font-semibold">Include Item:</span> Cannot include. Item weight (${step.itemWt}) > Current Capacity (${step.c}).`;
+                }
+
+                statusTitle.innerHTML = `Calculating cell dp[${step.r}][${step.c}] <span class="text-sm font-normal text-gray-500 ml-2">Item ${step.r} (Wt: ${step.itemWt}, Val: ${step.itemVal}) at Capacity ${step.c}</span>`;
+                
+                statusText.innerHTML = `
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 mt-2">
+                        <div class="bg-pink-50 p-2 rounded border border-pink-200 text-sm">
+                            <span class="text-pink-600 font-semibold">Exclude Item:</span> Fallback to dp[${step.excludeRef.r}][${step.excludeRef.c}]. Value = <strong>${step.excludeRef.v}</strong>.
+                        </div>
+                        <div class="bg-green-50 p-2 rounded border border-green-200 text-sm">
+                            ${includeHtml}
+                        </div>
+                    </div>
+                    <div class="mt-2 text-gray-800">
+                        <strong>Decision:</strong> Max(${step.excludeRef.v}, ${step.includeRef ? step.includeRef.v : -1}) = <strong class="text-lg text-yellow-600">${step.chosen.v}</strong>.
+                        Weights selected: [${step.chosen.w.length > 0 ? step.chosen.w.join(', ') : 'None'}].
+                    </div>
+                `;
+            } else {
+                // Done
+                const finalR = n;
+                const finalC = W;
+                const finalCell = document.getElementById(`cell-${finalR}-${finalC}`);
+                finalCell.classList.add('highlight-final');
+                finalCell.scrollIntoView({ behavior: 'smooth', block: 'nearest', inline: 'end' });
+                
+                statusTitle.innerHTML = `<span class="text-green-600">Algorithm Complete!</span>`;
+                statusText.innerHTML = `The maximum value we can achieve is <strong>${dp[finalR][finalC].v}</strong> using items with weights: <strong>[${dp[finalR][finalC].w.join(', ')}]</strong>. Final answer is at dp[${finalR}][${finalC}].`;
+                pauseAnimation();
+            }
+
+            // Update button states
+            document.getElementById('btn-prev').disabled = currentStepIndex === -1;
+            document.getElementById('btn-next').disabled = currentStepIndex >= calculationSteps.length;
+            
+            // Manage button opacities for visual feedback
+            document.getElementById('btn-prev').classList.toggle('opacity-50', currentStepIndex === -1);
+            document.getElementById('btn-next').classList.toggle('opacity-50', currentStepIndex >= calculationSteps.length);
+        }
+
+        // Animation Control Handlers
+        function nextStep() {
+            if (currentStepIndex < calculationSteps.length) {
+                currentStepIndex++;
+                updateUI();
+            } else {
+                pauseAnimation();
+            }
+        }
+
+        function prevStep() {
+            if (currentStepIndex > -1) {
+                currentStepIndex--;
+                updateUI();
+            }
+        }
+
+        function resetAnimation() {
+            pauseAnimation();
+            currentStepIndex = -1;
+            updateUI();
+        }
+
+        function togglePlay() {
+            const playBtn = document.getElementById('btn-play');
+            if (isPlaying) {
+                pauseAnimation();
+            } else {
+                isPlaying = true;
+                playBtn.innerText = 'Pause';
+                playBtn.classList.replace('bg-green-600', 'bg-orange-500');
+                playBtn.classList.replace('hover:bg-green-700', 'hover:bg-orange-600');
+                // Execute immediately, then set interval
+                nextStep();
+                playInterval = setInterval(nextStep, 1500); // 1.5s per step for readability
+            }
+        }
+
+        function pauseAnimation() {
+            isPlaying = false;
+            clearInterval(playInterval);
+            const playBtn = document.getElementById('btn-play');
+            playBtn.innerText = 'Play';
+            playBtn.classList.replace('bg-orange-500', 'bg-green-600');
+            playBtn.classList.replace('hover:bg-orange-600', 'hover:bg-green-700');
+        }
+
+        // Apply custom data handler
+        function applyCustomData() {
+            pauseAnimation();
+            const valStr = document.getElementById('input-values').value;
+            const wtStr = document.getElementById('input-weights').value;
+            const wStr = document.getElementById('input-w').value;
+
+            const newVals = valStr.split(',').map(s => parseInt(s.trim())).filter(num => !isNaN(num));
+            const newWts = wtStr.split(',').map(s => parseInt(s.trim())).filter(num => !isNaN(num));
+            const newW = parseInt(wStr);
+
+            const statusTitle = document.getElementById('status-title');
+            const statusText = document.getElementById('status-text');
+
+            if (newVals.length !== newWts.length) {
+                statusTitle.innerHTML = `<span class="text-red-600">Input Error</span>`;
+                statusText.innerText = "The number of Values and Weights must be the same!";
+                return;
+            }
+            if (newVals.length === 0 || isNaN(newW) || newW <= 0) {
+                statusTitle.innerHTML = `<span class="text-red-600">Input Error</span>`;
+                statusText.innerText = "Please enter valid numbers for values, weights, and capacity.";
+                return;
+            }
+            if (newW > 30) {
+                statusTitle.innerHTML = `<span class="text-red-600">Input Error</span>`;
+                statusText.innerText = "For visualization purposes, please keep Capacity (W) to 30 or less to prevent layout freezing.";
+                return;
+            }
+
+            // Update global data variables
+            values = newVals;
+            weights = newWts;
+            W = newW;
+            n = values.length;
+            maxVal = Math.max(...values);
+
+            document.getElementById('subtitle-info').innerText = `Capacity (W) = ${W} | Items = ${n}`;
+
+            // Reset and Rebuild
+            currentStepIndex = -1;
+            initializeDP();
+            buildTableGrid();
+            updateUI();
+        }
+
+        // Event Listeners
+        document.getElementById('btn-next').addEventListener('click', () => { pauseAnimation(); nextStep(); });
+        document.getElementById('btn-prev').addEventListener('click', () => { pauseAnimation(); prevStep(); });
+        document.getElementById('btn-reset').addEventListener('click', resetAnimation);
+        document.getElementById('btn-play').addEventListener('click', togglePlay);
+        document.getElementById('btn-apply').addEventListener('click', applyCustomData);
+
+        // Bootstrap the application
+        window.onload = () => {
+            initializeDP();
+            buildTableGrid();
+            updateUI();
+        };
+
+    </script>
+</body>
+</html>
