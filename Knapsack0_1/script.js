@@ -8,10 +8,10 @@ document.addEventListener("DOMContentLoaded", () => {
     const tableContainer = document.getElementById("table-container");
     const startBtn = document.getElementById("start-btn");
 
-    // Build Table
+    // Build the grid
     const table = document.createElement("table");
     
-    // Top Row (j labels)
+    // Top Axis Row
     const trHeader = document.createElement("tr");
     const thAxis = document.createElement("th");
     thAxis.className = "axis-label";
@@ -26,12 +26,12 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     table.appendChild(trHeader);
 
-    // Rows for items
+    // Left Axis & DP Matrix
     for (let i = 0; i <= n; i++) {
         const tr = document.createElement("tr");
         
-        // Left Column (i labels and item visuals)
-        const tdRowLabel = document.createElement("th");
+        // Build Left Panel (i labels + item visuals)
+        const tdRowLabel = document.createElement("td");
         tdRowLabel.className = "row-label " + (i === 0 ? "row-label-0" : "");
         tdRowLabel.id = `row-label-${i}`;
         
@@ -39,10 +39,12 @@ document.addEventListener("DOMContentLoaded", () => {
             tdRowLabel.innerText = "i=0";
         } else {
             const idx = i - 1;
-            const wBarWidth = Math.max(10, (val[idx] / maxVal) * 100);
+            // Value bar width calculation matching Java: (val / max) * maxBarW
+            const wBarWidth = Math.max(4, (val[idx] / maxVal) * 100);
+            
             tdRowLabel.innerHTML = `
                 <div class="item-panel">
-                    <div>i=${i}</div>
+                    <div class="i-text">i=${i}</div>
                     <div class="weight-circle">${weight[idx]}</div>
                     <div class="value-bar-container">
                         <div class="value-bar-fill" style="width: ${wBarWidth}%"></div>
@@ -53,16 +55,18 @@ document.addEventListener("DOMContentLoaded", () => {
         }
         tr.appendChild(tdRowLabel);
 
-        // DP Cells
+        // Build DP Cells
         for (let j = 0; j <= W; j++) {
             const td = document.createElement("td");
             td.className = "dp-cell";
             td.id = `cell-${i}-${j}`;
             td.innerHTML = `
-                <div class="dp-val"></div>
-                <div class="dp-bottom">
-                    <div class="chosen-circles"></div>
-                    <div class="chosen-text"></div>
+                <div class="dp-inner">
+                    <div class="dp-top"></div>
+                    <div class="dp-bottom">
+                        <div class="chosen-circles"></div>
+                        <div class="chosen-text"></div>
+                    </div>
                 </div>
             `;
             tr.appendChild(td);
@@ -71,25 +75,31 @@ document.addEventListener("DOMContentLoaded", () => {
     }
     tableContainer.appendChild(table);
 
-    // Helper functions for animation
+    // Utility: Async sleep to match Thread.sleep()
     const sleep = (ms) => new Promise(resolve => setTimeout(resolve, ms));
     
+    // Utility: Update Cell UI
     const setCellData = (i, j, value, chosenList) => {
         const cell = document.getElementById(`cell-${i}-${j}`);
-        cell.querySelector(".dp-val").innerText = value;
+        cell.querySelector(".dp-top").innerText = value;
         
         const circlesDiv = cell.querySelector(".chosen-circles");
         circlesDiv.innerHTML = "";
-        chosenList.forEach(w => {
-            const circle = document.createElement("div");
-            circle.className = "small-circle";
-            circle.innerText = w;
-            circlesDiv.appendChild(circle);
-        });
         
-        cell.querySelector(".chosen-text").innerText = chosenList.length ? `[${chosenList.join(", ")}]` : "[]";
+        if (chosenList && chosenList.length > 0) {
+            chosenList.forEach(w => {
+                const circle = document.createElement("div");
+                circle.className = "small-circle";
+                circle.innerText = w;
+                circlesDiv.appendChild(circle);
+            });
+            cell.querySelector(".chosen-text").innerText = `[${chosenList.join(", ")}]`;
+        } else {
+            cell.querySelector(".chosen-text").innerText = "[]";
+        }
     };
 
+    // Utility: Toggle Highlight Class
     const highlight = (elementId, turnOn) => {
         const el = document.getElementById(elementId);
         if (el) {
@@ -98,12 +108,12 @@ document.addEventListener("DOMContentLoaded", () => {
         }
     };
 
-    // Main DP Animation Logic
+    // DP Algorithm & Animation Engine
     const runDpAnimation = async (delayMs) => {
         let dp = Array.from({ length: n + 1 }, () => Array(W + 1).fill(0));
         let chosen = Array.from({ length: n + 1 }, () => Array(W + 1).fill([]));
 
-        // Initialize row 0
+        // Row 0 Init
         for (let j = 0; j <= W; j++) {
             setCellData(0, j, 0, []);
             highlight(`cell-0-${j}`, true);
@@ -111,7 +121,7 @@ document.addEventListener("DOMContentLoaded", () => {
             highlight(`cell-0-${j}`, false);
         }
 
-        // Initialize col 0
+        // Col 0 Init
         for (let i = 0; i <= n; i++) {
             setCellData(i, 0, 0, []);
             highlight(`cell-${i}-0`, true);
@@ -119,9 +129,10 @@ document.addEventListener("DOMContentLoaded", () => {
             highlight(`cell-${i}-0`, false);
         }
 
-        // Main nested loops
+        // Main Execution Loop
         for (let i = 1; i <= n; i++) {
             for (let j = 1; j <= W; j++) {
+                // Highlight active cell
                 highlight(`cell-${i}-${j}`, true);
                 await sleep(delayMs);
 
@@ -129,6 +140,7 @@ document.addEventListener("DOMContentLoaded", () => {
                 const currentValue = val[i - 1];
 
                 if (currentWeight > j) {
+                    // Exclude: Inherit from above
                     highlight(`cell-${i - 1}-${j}`, true);
                     await sleep(Math.max(80, delayMs / 3));
                     highlight(`cell-${i - 1}-${j}`, false);
@@ -140,6 +152,7 @@ document.addEventListener("DOMContentLoaded", () => {
                     const excludeVal = dp[i - 1][j];
 
                     if (includeVal > excludeVal) {
+                        // Include: Highlight Left Panel AND Source DP Cell
                         highlight(`row-label-${i}`, true);
                         highlight(`cell-${i - 1}-${j - currentWeight}`, true);
                         await sleep(Math.max(120, delayMs / 3));
@@ -150,6 +163,7 @@ document.addEventListener("DOMContentLoaded", () => {
                         dp[i][j] = includeVal;
                         chosen[i][j] = [...chosen[i - 1][j - currentWeight], currentWeight];
                     } else {
+                        // Exclude: Inherit from above
                         highlight(`cell-${i - 1}-${j}`, true);
                         await sleep(Math.max(80, delayMs / 3));
                         highlight(`cell-${i - 1}-${j}`, false);
@@ -165,20 +179,26 @@ document.addEventListener("DOMContentLoaded", () => {
             }
         }
 
-        setTimeout(() => alert(`Update complete. Max value is at (i=${n},j=${W})=${dp[n][W]}`), 100);
-        startBtn.disabled = false;
+        setTimeout(() => {
+            alert(`Update complete. Max value is at (i=${n},j=${W})=${dp[n][W]}`);
+            startBtn.disabled = false;
+        }, 100);
     };
 
+    // Reset and trigger
     startBtn.addEventListener("click", () => {
         startBtn.disabled = true;
-        // Reset grid visuals before starting
+        
+        // Clear grid
         for(let i=0; i<=n; i++) {
             for(let j=0; j<=W; j++) {
-                document.getElementById(`cell-${i}-${j}`).querySelector(".dp-val").innerText = "";
-                document.getElementById(`cell-${i}-${j}`).querySelector(".chosen-circles").innerHTML = "";
-                document.getElementById(`cell-${i}-${j}`).querySelector(".chosen-text").innerText = "";
+                const cell = document.getElementById(`cell-${i}-${j}`);
+                cell.querySelector(".dp-top").innerText = "";
+                cell.querySelector(".chosen-circles").innerHTML = "";
+                cell.querySelector(".chosen-text").innerText = "";
             }
         }
+        
         runDpAnimation(800);
     });
 });
