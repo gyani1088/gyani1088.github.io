@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Trapping Rainwater Animation</title>
+    <style>
+        :root {
+            --bg-color: #f4f4f9;
+            --bar-color: #34495e;
+            --left-color: rgba(231, 76, 60, 0.4); /* Translucent Red */
+            --right-color: rgba(46, 204, 113, 0.4); /* Translucent Green */
+            --water-color: #3498db; /* Solid Blue */
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: var(--bg-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .controls {
+            background: white;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            width: 100%;
+            max-width: 600px;
+        }
+
+        input {
+            padding: 8px;
+            font-size: 16px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            flex: 1;
+            min-width: 200px;
+        }
+
+        button {
+            padding: 8px 16px;
+            font-size: 16px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background-color: #2c3e50;
+            color: white;
+            transition: background 0.3s;
+        }
+
+        button:hover { background-color: #1a252f; }
+        button:disabled { background-color: #95a5a6; cursor: not-allowed; }
+
+        .stats {
+            font-size: 24px;
+            font-weight: bold;
+            margin-bottom: 20px;
+            color: #2c3e50;
+        }
+
+        #chart-container {
+            display: flex;
+            align-items: flex-end;
+            height: 300px;
+            width: 100%;
+            max-width: 800px;
+            background: white;
+            border-bottom: 4px solid #2c3e50;
+            border-left: 2px solid #bdc3c7;
+            padding-top: 20px;
+            box-sizing: border-box;
+        }
+
+        .column {
+            flex: 1;
+            height: 100%;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            /* No gaps */
+            margin: 0; 
+        }
+
+        .bar-base {
+            background-color: var(--bar-color);
+            width: 100%;
+            position: absolute;
+            bottom: 0;
+            z-index: 4;
+            transition: height 0.3s ease;
+        }
+
+        .bar-left {
+            background-color: var(--left-color);
+            width: 100%;
+            position: absolute;
+            bottom: 0;
+            height: 0;
+            z-index: 3;
+            transition: height 0.3s ease;
+        }
+
+        .bar-right {
+            background-color: var(--right-color);
+            width: 100%;
+            position: absolute;
+            bottom: 0;
+            height: 0;
+            z-index: 2;
+            transition: height 0.3s ease;
+        }
+
+        .bar-water {
+            background-color: var(--water-color);
+            width: 100%;
+            position: absolute;
+            height: 0;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity 0.5s ease, height 0.5s ease;
+        }
+
+        .legend {
+            display: flex;
+            gap: 15px;
+            margin-top: 20px;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        
+        .legend-item {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            font-size: 14px;
+        }
+
+        .color-box {
+            width: 15px; height: 15px;
+            border-radius: 3px;
+        }
+
+        /* Mobile responsiveness */
+        @media (max-width: 600px) {
+            #chart-container { height: 250px; }
+            .stats { font-size: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="controls">
+        <input type="text" id="array-input" value="0, 1, 0, 2, 1, 0, 1, 3, 2, 1, 2, 1" placeholder="Enter comma separated numbers">
+        <button id="btn-draw" onclick="initChart()">Draw Array</button>
+        <button id="btn-play" onclick="playAnimation()">Play Animation</button>
+    </div>
+
+    <div class="stats">Total Water (res): <span id="res-counter">0</span></div>
+
+    <div id="chart-container"></div>
+
+    <div class="legend">
+        <div class="legend-item"><div class="color-box" style="background: var(--bar-color)"></div> Terrain (arr)</div>
+        <div class="legend-item"><div class="color-box" style="background: var(--left-color)"></div> Left Max</div>
+        <div class="legend-item"><div class="color-box" style="background: var(--right-color)"></div> Right Max</div>
+        <div class="legend-item"><div class="color-box" style="background: var(--water-color)"></div> Trapped Water</div>
+    </div>
+
+    <script>
+        let isAnimating = false;
+        
+        function sleep(ms) {
+            return new Promise(resolve => setTimeout(resolve, ms));
+        }
+
+        function getArray() {
+            const val = document.getElementById('array-input').value;
+            return val.split(',').map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n >= 0);
+        }
+
+        function initChart() {
+            if (isAnimating) return;
+            const arr = getArray();
+            const container = document.getElementById('chart-container');
+            container.innerHTML = '';
+            document.getElementById('res-counter').innerText = '0';
+            
+            const maxVal = Math.max(...arr) || 1; // Prevent div by zero
+
+            arr.forEach((val, i) => {
+                const col = document.createElement('div');
+                col.className = 'column';
+                col.id = `col-${i}`;
+
+                // Base terrain
+                const base = document.createElement('div');
+                base.className = 'bar-base';
+                base.style.height = `${(val / maxVal) * 100}%`;
+
+                // Left Max Overlay
+                const leftBar = document.createElement('div');
+                leftBar.className = 'bar-left';
+                leftBar.id = `left-${i}`;
+
+                // Right Max Overlay
+                const rightBar = document.createElement('div');
+                rightBar.className = 'bar-right';
+                rightBar.id = `right-${i}`;
+
+                // Water
+                const waterBar = document.createElement('div');
+                waterBar.className = 'bar-water';
+                waterBar.id = `water-${i}`;
+                waterBar.style.bottom = `${(val / maxVal) * 100}%`; // Sits on top of terrain
+
+                col.appendChild(leftBar);
+                col.appendChild(rightBar);
+                col.appendChild(waterBar);
+                col.appendChild(base);
+                container.appendChild(col);
+            });
+        }
+
+        async function playAnimation() {
+            if (isAnimating) return;
+            isAnimating = true;
+            document.getElementById('btn-draw').disabled = true;
+            document.getElementById('btn-play').disabled = true;
+
+            initChart(); // Reset visually before starting
+            const arr = getArray();
+            const n = arr.length;
+            if (n === 0) { isAnimating = false; return; }
+
+            const maxVal = Math.max(...arr) || 1;
+            let left = new Array(n).fill(0);
+            let right = new Array(n).fill(0);
+            const speed = 200; // Animation delay in ms
+
+            // Phase 1: Left Max (Sweep Left to Right)
+            let currentLeftMax = 0;
+            for (let i = 0; i < n; i++) {
+                currentLeftMax = Math.max(currentLeftMax, arr[i]);
+                left[i] = currentLeftMax;
+                const leftEl = document.getElementById(`left-${i}`);
+                leftEl.style.height = `${(left[i] / maxVal) * 100}%`;
+                await sleep(speed);
+            }
+
+            // Phase 2: Right Max (Sweep Right to Left)
+            let currentRightMax = 0;
+            for (let i = n - 1; i >= 0; i--) {
+                currentRightMax = Math.max(currentRightMax, arr[i]);
+                right[i] = currentRightMax;
+                const rightEl = document.getElementById(`right-${i}`);
+                rightEl.style.height = `${(right[i] / maxVal) * 100}%`;
+                await sleep(speed);
+            }
+
+            // Phase 3: Calculate Water and Result
+            let res = 0;
+            for (let i = 0; i < n; i++) {
+                let minOf2 = Math.min(left[i], right[i]);
+                let waterAmount = minOf2 - arr[i];
+
+                if (waterAmount > 0) {
+                    const waterEl = document.getElementById(`water-${i}`);
+                    waterEl.style.height = `${(waterAmount / maxVal) * 100}%`;
+                    waterEl.style.opacity = '1';
+                    
+                    res += waterAmount;
+                    document.getElementById('res-counter').innerText = res;
+                    await sleep(speed + 100);
+                }
+            }
+
+            isAnimating = false;
+            document.getElementById('btn-draw').disabled = false;
+            document.getElementById('btn-play').disabled = false;
+        }
+
+        // Initialize on load
+        window.onload = initChart;
+    </script>
+</body>
+</html>
