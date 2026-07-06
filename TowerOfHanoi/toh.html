@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Tower of Hanoi - Responsive & Smooth</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <div class="controls">
+        <label for="diskCount">Disks (3-8): </label>
+        <input type="number" id="diskCount" min="3" max="8" value="4">
+        <button onclick="initHanoi()">Start Animation</button>
+    </div>
+
+    <div class="canvas-container">
+        <canvas id="hanoiCanvas" width="700" height="400"></canvas>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
