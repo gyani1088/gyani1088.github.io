@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>AVL Tree Animation</title>
+<style>
+  :root { --bg:#ffffff; --fg:#111827; --muted:#6b7280; --line:#e5e7eb; --btn:#f3f4f6; --btn-b:#d1d5db; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#111827; --fg:#f3f4f6; --muted:#9ca3af; --line:#374151; --btn:#1f2937; --btn-b:#4b5563; }
+  }
+  body { margin:0; background:var(--bg); color:var(--fg); font:14px system-ui, sans-serif; }
+  .bar { display:flex; flex-wrap:wrap; gap:8px; align-items:center; padding:12px 16px; }
+  input[type=text] { padding:6px 8px; width:170px; border:1px solid var(--btn-b); border-radius:6px; background:var(--bg); color:var(--fg); }
+  button { padding:6px 12px; border:1px solid var(--btn-b); background:var(--btn); color:var(--fg); border-radius:6px; cursor:pointer; }
+  button:hover { filter:brightness(0.95); }
+  #msg { padding:0 16px 4px; font-weight:600; font-size:15px; min-height:22px; }
+  .main { display:flex; gap:12px; align-items:flex-start; padding:0 8px 8px; }
+  #wrap { flex:1; min-width:0; }
+  .side { width:330px; border:1px solid var(--line); border-radius:8px; padding:8px 12px; box-sizing:border-box; }
+  .side h3 { margin:0 0 6px; font-size:14px; }
+  #log { max-height:560px; overflow:auto; font-size:13px; line-height:1.45; }
+  #log div { margin:2px 0; }
+  #log .hdr { font-weight:700; margin-top:10px; }
+  @media (max-width:900px) { .main { flex-direction:column; } .side { width:auto; align-self:stretch; } }
+  canvas { display:block; width:100%; }
+  .legend { display:flex; flex-wrap:wrap; gap:16px; padding:4px 16px 16px; color:var(--muted); font-size:12px; }
+  .legend span::before { content:""; display:inline-block; width:12px; height:12px; border-radius:50%; margin-right:6px; vertical-align:-2px; background:var(--c); }
+</style>
+</head>
+<body>
+<div class="bar">
+  <label>Value(s): <input id="val" type="text" placeholder="e.g. 10 20 30" autofocus></label>
+  <button id="ins">Insert</button>
+  <button id="del">Delete</button>
+  <button id="rnd">Random</button>
+  <button id="demo">Demo</button>
+  <button id="clr">Clear</button>
+  <label>Speed: <input id="speed" type="range" min="1" max="10" value="6"></label>
+</div>
+<div id="msg">Insert a number to begin (or press Demo).</div>
+<div class="main">
+  <div id="wrap"><canvas id="c"></canvas></div>
+  <aside class="side"><h3>Walkthrough</h3><div id="log"></div></aside>
+</div>
+<div class="legend">
+  <span style="--c:#3B82F6">node</span>
+  <span style="--c:#F59E0B">visiting / checking</span>
+  <span style="--c:#22C55E">new / copied</span>
+  <span style="--c:#EF4444">unbalanced / removed</span>
+  <span style="--c:#A855F7">rotating</span>
+</div>
+
+<script>
+const NORMAL = '#3B82F6', COMPARE = '#F59E0B', NEWNODE = '#22C55E', BAD = '#EF4444', ROTATE = '#A855F7';
+const RADIUS = 20, LEVEL_GAP = 80, TOP = 80, LEFT = 100, TICK = 16;
+
+class Node {
+  constructor(key) {
+    this.key = key; this.left = null; this.right = null; this.h = 0;
+    this.x = 0; this.y = 0; this.tx = 0; this.ty = 0; this.placed = false; this.color = NORMAL;
+    this.hideKey = false;   // true while the key label is flying during a value exchange
+  }
+}
+
+let root = null;
+const steps = [];   // animation steps of the current operation
+const ops = [];     // queued user operations
+let wait = 0, maxDepth = 0, idx = 0, spacing = 60, offsetX = LEFT;
+const ghosts = [];   // removed nodes that are fading out: {n, parent, a}
+let swap = null;     // value-exchange animation: {a, b, ka, kb, t}
+
+const canvas = document.getElementById('c');
+const ctx = canvas.getContext('2d');
+const msgEl = document.getElementById('msg');
+const speedEl = document.getElementById('speed');
+const logEl = document.getElementById('log');
+let stepNo = 0;
+const msg = s => {
+  msgEl.textContent = s;
+  const d = document.createElement('div');
+  d.textContent = (++stepNo) + '. ' + s;
+  logEl.appendChild(d);
+  logEl.scrollTop = logEl.scrollHeight;
+};
+const logHeader = t => {
+  stepNo = 0;
+  const d = document.createElement('div');
+  d.className = 'hdr'; d.textContent = t;
+  logEl.appendChild(d);
+};
+const fmt = b => (b > 0 ? '+' : '') + b;
+
+/* ---------------- AVL helpers ---------------- */
+const height  = n => n ? n.h : -1;
+const update  = n => { n.h = 1 + Math.max(height(n.left), height(n.right)); };
+const balance = n => n ? height(n.left) - height(n.right) : 0;
+
+function rotateRight(y) { const x = y.left; y.left = x.right; x.right = y; update(y); update(x); return x; }
+function rotateLeft(x)  { const y = x.right; x.right = y.left; y.left = x; update(x); update(y); return y; }
+function replaceChild(parent, oldC, newC) {
+  if (!parent) root = newC;
+  else if (parent.left === oldC) parent.left = newC;
+  else parent.right = newC;
+}
+
+/* ---------------- insert ---------------- */
+function startInsert(key) {
+  logHeader('Insert ' + key);
+  const path = [];
+  let cur = root;
+  while (cur) {
+    if (cur.key === key) { msg(`Key ${key} already exists - duplicates are ignored.`); return; }
+    path.push(cur);
+    cur = key < cur.key ? cur.left : cur.right;
+  }
+  for (const n of path) steps.push(() => {
+    resetColors(); n.color = COMPARE;
+    msg(`Insert ${key}: compare with ${n.key}  \u2192 go ${key < n.key ? 'left' : 'right'}`);
+  });
+  steps.push(() => {
+    resetColors();
+    const nn = new Node(key); nn.color = NEWNODE;
+    if (!path.length) root = nn;
+    else { const p = path[path.length - 1]; if (key < p.key) p.left = nn; else p.right = nn; }
+    msg(`Insert ${key} as a new leaf.`);
+    layout();
+  });
+  for (let i = path.length - 1; i >= 0; i--) {
+    const n = path[i], parent = i > 0 ? path[i - 1] : null;
+    steps.push(() => checkNode(n, parent));
+  }
+  steps.push(() => { resetColors(); msg(`Inserted ${key}. The tree is a valid AVL tree.`); });
+}
+
+/* ---------------- delete ---------------- */
+function startSwap(a, b) {
+  swap = { a, b, ka: a.key, kb: b.key, t: 0 };
+  a.hideKey = true; b.hideKey = true;
+}
+
+function startDelete(key) {
+  logHeader('Delete ' + key);
+
+  // 1) search for the node
+  const path = [];
+  let cur = root;
+  while (cur && cur.key !== key) {
+    const n = cur;
+    path.push(n);
+    steps.push(() => {
+      resetColors(); n.color = COMPARE;
+      msg(`Search for ${key}: compare with ${n.key}  → ${key < n.key ? 'smaller, go left' : 'larger, go right'}`);
+    });
+    cur = key < cur.key ? cur.left : cur.right;
+  }
+  if (!cur) { steps.length = 0; msg(`Key ${key} was not found - nothing to delete.`); return; }
+
+  const target = cur;
+  path.push(target);
+
+  // 2) classify: leaf / one child / two children
+  const kind = (target.left && target.right) ? 3 : (target.left || target.right) ? 2 : 1;
+  const what = kind === 1 ? 'no children (Case 1: leaf)'
+    : kind === 2 ? `only a ${target.left ? 'left' : 'right'} child (Case 2: one child)`
+    : 'two children (Case 3)';
+  steps.push(() => { resetColors(); target.color = COMPARE; msg(`Found ${key}. This node has ${what}.`); });
+
+  // 3) Case 3 only: find successor, exchange values
+  if (kind === 3) {
+    const chain = [];
+    let s = target.right;
+    chain.push(s);
+    while (s.left) { s = s.left; chain.push(s); }
+    const succ = s, succKey = succ.key;
+    path.push(...chain);
+
+    steps.push(() => {
+      resetColors(); target.color = BAD;
+      msg('Case 3 - two children: the node cannot simply be cut out. Plan: find its in-order successor ' +
+          '(smallest value in the right subtree), exchange values with it, then delete the successor\'s node, ' +
+          'which has at most one child.');
+    });
+    chain.forEach((c, j) => steps.push(() => {
+      resetColors(); target.color = BAD; c.color = COMPARE;
+      let m = j === 0 ? `Successor search: step into the right subtree at ${c.key}.` : `Keep going left: ${c.key}.`;
+      if (!c.left) m += ` No left child, so ${c.key} is the in-order successor.`;
+      msg(m);
+    }));
+    steps.push(() => {
+      resetColors(); target.color = BAD; succ.color = NEWNODE;
+      msg(`Exchange the values of the two nodes: ${key} ↔ ${succKey}.`);
+    });
+    steps.push(() => {
+      resetColors(); target.color = ROTATE; succ.color = ROTATE;
+      startSwap(target, succ);
+      msg(`Exchanging... ${key} travels down to the successor's node while ${succKey} travels up.`);
+    });
+  }
+
+  // 4) physically remove the node that now holds the deleted value
+  const rem = path[path.length - 1];
+  const remParent = path.length >= 2 ? path[path.length - 2] : null;
+  const repl = rem.left || rem.right;   // at most one child
+  const prefix = kind === 3
+    ? `Exchange done - the lower node now holds ${key}, the value being deleted, and it has at most one child. `
+    : '';
+
+  steps.push(() => {
+    resetColors(); rem.color = BAD;
+    if (repl) repl.color = NEWNODE;
+    msg(prefix + (!repl
+      ? 'Case 1 - this node is a leaf: it is simply detached from its parent.'
+      : `Case 2 - this node has one child (${repl.key}): the child moves up into its place, subtree and all.`));
+  });
+  steps.push(() => {
+    resetColors();
+    const removedKey = rem.key;
+    replaceChild(remParent, rem, repl);
+    ghosts.push({ n: rem, parent: remParent, a: 1 });
+    if (repl) repl.color = NEWNODE;
+    msg(`Node ${removedKey} is removed` + (repl ? `; ${repl.key} slides up into its place.` : '.') +
+        ' Now walk back up and re-check the balance factors.');
+    layout();
+  });
+
+  // 5) rebalance on the way up
+  for (let i = path.length - 2; i >= 0; i--) {
+    const n = path[i], parent = i > 0 ? path[i - 1] : null;
+    steps.push(() => checkNode(n, parent));
+  }
+  steps.push(() => { resetColors(); msg(`Deleted ${key}. The tree is a valid AVL tree.`); });
+}
+
+/* ---------------- balance check + rotations ---------------- */
+function checkNode(n, parent) {
+  resetColors();
+  update(n);
+  const b = balance(n);
+  if (Math.abs(b) <= 1) {
+    n.color = COMPARE;
+    msg(`Check node ${n.key}: balance factor = ${fmt(b)}  \u2192 balanced.`);
+    return;
+  }
+  n.color = BAD;
+  if (b > 1) {                                   // left heavy
+    const c = n.left;
+    if (balance(c) >= 0) {
+      msg(`Node ${n.key} is LEFT-LEFT heavy (balance ${fmt(b)})  \u2192  single RIGHT rotation.`);
+      steps.unshift(() => rotate(n, parent, true, `Rotate RIGHT at ${n.key}.`));
+    } else {
+      msg(`Node ${n.key} is LEFT-RIGHT heavy (balance ${fmt(b)})  \u2192  rotate LEFT at ${c.key}, then RIGHT at ${n.key}.`);
+      const first = () => {
+        resetColors();
+        const child = n.left, nc = rotateLeft(child);
+        n.left = nc; nc.color = ROTATE; child.color = ROTATE; n.color = BAD;
+        msg(`Step 1/2: rotate LEFT at ${child.key} (turns it into a Left-Left case).`);
+        layout();
+      };
+      const second = () => rotate(n, parent, true, `Step 2/2: rotate RIGHT at ${n.key}.`);
+      steps.unshift(first, second);
+    }
+  } else {                                       // right heavy
+    const c = n.right;
+    if (balance(c) <= 0) {
+      msg(`Node ${n.key} is RIGHT-RIGHT heavy (balance ${fmt(b)})  \u2192  single LEFT rotation.`);
+      steps.unshift(() => rotate(n, parent, false, `Rotate LEFT at ${n.key}.`));
+    } else {
+      msg(`Node ${n.key} is RIGHT-LEFT heavy (balance ${fmt(b)})  \u2192  rotate RIGHT at ${c.key}, then LEFT at ${n.key}.`);
+      const first = () => {
+        resetColors();
+        const child = n.right, nc = rotateRight(child);
+        n.right = nc; nc.color = ROTATE; child.color = ROTATE; n.color = BAD;
+        msg(`Step 1/2: rotate RIGHT at ${child.key} (turns it into a Right-Right case).`);
+        layout();
+      };
+      const second = () => rotate(n, parent, false, `Step 2/2: rotate LEFT at ${n.key}.`);
+      steps.unshift(first, second);
+    }
+  }
+}
+
+function rotate(n, parent, right, text) {
+  resetColors();
+  const nr = right ? rotateRight(n) : rotateLeft(n);
+  replaceChild(parent, n, nr);
+  nr.color = ROTATE; n.color = ROTATE;
+  msg(text);
+  layout();
+}
+
+/* ---------------- layout & animation ---------------- */
+const count = n => n ? 1 + count(n.left) + count(n.right) : 0;
+function collect(n, out) { if (!n) return out; collect(n.left, out); out.push(n); collect(n.right, out); return out; }
+const all = () => collect(root, []);
+function resetColors() { for (const n of all()) n.color = NORMAL; }
+
+function layout() {
+  const cnt = count(root);
+  const cssW = canvas.clientWidth || 900;
+  const avail = Math.max(100, cssW - LEFT - 50);
+  spacing = Math.max(20, Math.min(60, avail / Math.max(cnt, 1)));
+  offsetX = LEFT + Math.max(0, (avail - (cnt - 1) * spacing) / 2);
+  idx = 0; maxDepth = 0;
+  assign(root, null, 0);
+  fitCanvas();
+}
+
+// In-order layout: x = in-order index, y = depth (root = 0, +1 per level)
+function assign(n, parent, depth) {
+  if (!n) return;
+  assign(n.left, n, depth + 1);
+  n.tx = offsetX + idx * spacing;
+  n.ty = TOP + depth * LEVEL_GAP;
+  idx++;
+  maxDepth = Math.max(maxDepth, depth);
+  if (!n.placed) {
+    n.placed = true;
+    if (parent) { n.x = parent.x; n.y = parent.y; } else { n.x = n.tx; n.y = TOP - 60; }
+  }
+  assign(n.right, n, depth + 1);
+}
+
+function fitCanvas() {
+  const dpr = window.devicePixelRatio || 1;
+  const w = canvas.clientWidth;
+  const h = Math.max(420, TOP + (maxDepth + 1) * LEVEL_GAP + 20);
+  if (canvas.width !== Math.round(w * dpr) || canvas.height !== Math.round(h * dpr)) {
+    canvas.style.height = h + 'px';
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+  }
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+}
+
+const hold = () => 1500 - (speedEl.value - 1) * 140;
+
+function animate() {
+  let moving = false;
+  const f = 0.10 + speedEl.value * 0.02;
+  for (const n of all()) {
+    const dx = n.tx - n.x, dy = n.ty - n.y;
+    if (Math.abs(dx) > 0.5 || Math.abs(dy) > 0.5) { n.x += dx * f; n.y += dy * f; moving = true; }
+    else { n.x = n.tx; n.y = n.ty; }
+  }
+  if (swap) {
+    swap.t += 0.008 + speedEl.value * 0.0025;
+    moving = true;
+    if (swap.t >= 1) {
+      const t = swap.a.key; swap.a.key = swap.b.key; swap.b.key = t;   // the real exchange of values
+      swap.a.hideKey = false; swap.b.hideKey = false;
+      swap = null;
+    }
+  }
+  for (let i = ghosts.length - 1; i >= 0; i--) {
+    ghosts[i].a -= 0.02 + speedEl.value * 0.002;
+    if (ghosts[i].a <= 0) ghosts.splice(i, 1);
+  }
+  if (ghosts.length) moving = true;
+  return moving;
+}
+
+function tick() {
+  const moving = animate();
+  if (!moving) {
+    if (wait > 0) wait -= TICK;
+    else if (steps.length) { steps.shift()(); wait = hold(); }
+    else if (ops.length) { ops.shift()(); }
+  }
+  draw();
+}
+
+/* ---------------- drawing ---------------- */
+function css(name) { return getComputedStyle(document.documentElement).getPropertyValue(name).trim(); }
+
+function draw() {
+  fitCanvas();
+  const W = canvas.clientWidth, H = canvas.clientHeight;
+  ctx.clearRect(0, 0, W, H);
+
+  // level guides: root = height 0, each level below adds +1
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.textBaseline = 'alphabetic';
+  for (let d = 0; d <= maxDepth; d++) {
+    const y = TOP + d * LEVEL_GAP;
+    ctx.setLineDash([4, 6]); ctx.lineWidth = 1; ctx.strokeStyle = css('--line');
+    ctx.beginPath(); ctx.moveTo(85, y); ctx.lineTo(W - 10, y); ctx.stroke();
+    ctx.setLineDash([]);
+    ctx.fillStyle = css('--muted'); ctx.textAlign = 'left';
+    ctx.fillText('Height ' + d, 12, y + 4);
+  }
+
+  const nodes = all();
+
+  // edges
+  ctx.lineWidth = 2; ctx.strokeStyle = '#6B7280';
+  for (const n of nodes) {
+    for (const c of [n.left, n.right]) {
+      if (!c) continue;
+      ctx.beginPath(); ctx.moveTo(n.x, n.y); ctx.lineTo(c.x, c.y); ctx.stroke();
+    }
+  }
+
+  // fading (removed) nodes
+  for (const gh of ghosts) {
+    ctx.globalAlpha = Math.max(0, Math.min(1, gh.a));
+    if (gh.parent) {
+      ctx.lineWidth = 2; ctx.strokeStyle = '#6B7280';
+      ctx.beginPath(); ctx.moveTo(gh.parent.x, gh.parent.y); ctx.lineTo(gh.n.x, gh.n.y); ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(gh.n.x, gh.n.y, RADIUS * (0.5 + 0.5 * gh.a), 0, Math.PI * 2);
+    ctx.fillStyle = BAD; ctx.fill();
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(gh.n.key), gh.n.x, gh.n.y + 1);
+    ctx.globalAlpha = 1;
+  }
+
+  // nodes
+  for (const n of nodes) {
+    ctx.beginPath(); ctx.arc(n.x, n.y, RADIUS, 0, Math.PI * 2);
+    ctx.fillStyle = n.color; ctx.fill();
+    ctx.lineWidth = 2; ctx.strokeStyle = shade(n.color); ctx.stroke();
+
+    ctx.font = 'bold 14px system-ui, sans-serif';
+    ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    if (!n.hideKey) ctx.fillText(String(n.key), n.x, n.y + 1);
+
+    const b = balance(n);
+    ctx.font = '11px system-ui, sans-serif';
+    ctx.fillStyle = Math.abs(b) > 1 ? BAD : css('--muted');
+    ctx.textAlign = 'left'; ctx.textBaseline = 'alphabetic';
+    ctx.fillText('bf ' + fmt(b), n.x + RADIUS - 4, n.y + RADIUS + 12);
+  }
+
+  // the two keys flying past each other during a value exchange
+  if (swap) {
+    const t = Math.min(1, swap.t), e = t * t * (3 - 2 * t), bow = Math.sin(Math.PI * e) * 28;
+    const L = (p, q) => p + (q - p) * e;
+    flyKey(swap.ka, L(swap.a.x, swap.b.x) + bow, L(swap.a.y, swap.b.y));
+    flyKey(swap.kb, L(swap.b.x, swap.a.x) - bow, L(swap.b.y, swap.a.y));
+  }
+}
+
+function flyKey(key, x, y) {
+  ctx.beginPath(); ctx.arc(x, y, 16, 0, Math.PI * 2);
+  ctx.fillStyle = '#fff'; ctx.fill();
+  ctx.lineWidth = 3; ctx.strokeStyle = ROTATE; ctx.stroke();
+  ctx.font = 'bold 15px system-ui, sans-serif';
+  ctx.fillStyle = '#111827'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+  ctx.fillText(String(key), x, y + 1);
+}
+
+function shade(hex) {
+  const v = parseInt(hex.slice(1), 16);
+  const r = Math.floor(((v >> 16) & 255) * 0.7), g = Math.floor(((v >> 8) & 255) * 0.7), b = Math.floor((v & 255) * 0.7);
+  return `rgb(${r},${g},${b})`;
+}
+
+/* ---------------- controls ---------------- */
+const valEl = document.getElementById('val');
+const parse = s => (s.match(/-?\d+/g) || []).map(Number);
+
+function doInsert() { for (const v of parse(valEl.value)) ops.push(() => startInsert(v)); valEl.value = ''; valEl.focus(); }
+function doDelete() { for (const v of parse(valEl.value)) ops.push(() => startDelete(v)); valEl.value = ''; valEl.focus(); }
+
+document.getElementById('ins').onclick = doInsert;
+document.getElementById('del').onclick = doDelete;
+document.getElementById('rnd').onclick = () => { const v = 1 + Math.floor(Math.random() * 99); ops.push(() => startInsert(v)); };
+document.getElementById('demo').onclick = () => { for (const v of [50, 30, 40, 60, 70, 20, 10, 85, 75]) ops.push(() => startInsert(v)); };
+document.getElementById('clr').onclick = () => { ops.push(() => { root = null; layout(); msg('Tree cleared.'); }); };
+valEl.addEventListener('keydown', e => { if (e.key === 'Enter') doInsert(); });
+window.addEventListener('resize', layout);
+
+layout();
+setInterval(tick, TICK);
+</script>
+</body>
+</html>
