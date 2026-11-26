@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Merge Sort Visualizer — Recursive Split Layout</title>
+<style>
+:root{--bg:#0b1020;--panel:#121a2d;--text:#eef3ff;--muted:#92a5c7;--cyan:#67d5ff;--border:#283956;--orange:#ffb86b;--pink:#f47cbb;--green:#63e0b0}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(ellipse at 50% -15%,#1b3154 0,transparent 55%),var(--bg);color:var(--text);font:15px/1.5 system-ui,Segoe UI,sans-serif}
+main{max-width:1240px;margin:auto;padding:26px 20px 36px}.top{display:flex;justify-content:space-between;align-items:flex-end;gap:16px;flex-wrap:wrap;margin-bottom:20px}.eyebrow{color:var(--cyan);font-size:12px;font-weight:700;letter-spacing:.15em;text-transform:uppercase}.title{font-size:clamp(28px,4vw,42px);font-weight:850;letter-spacing:-.04em;margin:3px 0}.subtitle{color:var(--muted);margin:0}.pill{border:1px solid var(--border);background:#0d1728;border-radius:999px;padding:7px 11px;color:#c0cde5;font-size:12px}
+.card{background:linear-gradient(145deg,#162136,#101827);border:1px solid var(--border);border-radius:17px;padding:16px;box-shadow:0 18px 45px #0002}.controls{display:flex;gap:10px;align-items:center;flex-wrap:wrap}.btn{border:1px solid #314764;background:#1b2b45;color:var(--text);padding:9px 14px;border-radius:10px;font-weight:650;cursor:pointer}.btn:hover{border-color:var(--cyan)}.btn.primary{background:linear-gradient(120deg,#159fc7,#3a65d4);border:0}.control{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:13px}.control input{accent-color:var(--cyan)}.status{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:14px 0}.stats{margin-left:auto;display:flex;gap:8px;flex-wrap:wrap}.stageCard{margin-top:12px;padding:12px;background:#0d1727}.stageHead{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:10px}.stageHead h2{font-size:16px;margin:0}.legend{display:flex;gap:12px;flex-wrap:wrap;color:var(--muted);font-size:12px}.legend span{display:flex;align-items:center;gap:5px}.dot{width:9px;height:9px;border-radius:50%}
+#stage{position:relative;width:100%;height:370px;overflow:hidden;border:1px solid #22334d;border-radius:13px;background:linear-gradient(#101b2d,#0b1424);padding:30px 12px 42px}
+#bars{height:100%;width:100%;display:grid;grid-template-columns:repeat(var(--n),minmax(0,1fr));align-items:end;gap:clamp(1px,0.35vw,4px);position:relative}
+.barSlot{height:100%;display:flex;align-items:flex-end;justify-content:center;position:relative;min-width:0}
+.bar{width:min(100%,32px);height:5%;min-height:3px;border-radius:4px 4px 1px 1px;background:linear-gradient(180deg,#6bd9ff,#3384e7);position:relative;transition:height .42s,background .2s,transform .4s;box-shadow:0 0 10px #4bb4f020}
+.value{position:absolute;top:-21px;left:50%;transform:translateX(-50%);font-size:clamp(9px,1vw,12px);color:#dceaff;white-space:nowrap}
+.index{position:absolute;bottom:-25px;color:#6f83a3;font-size:10px}
+.bar.compare{background:linear-gradient(#ffd18c,#f28b42)!important;box-shadow:0 0 15px #ffb15a45}.bar.moving{background:linear-gradient(#ff93c7,#d7498d)!important;transform:translateY(-7px)}.bar.sorted{background:linear-gradient(#7df1c3,#28a97a)!important;box-shadow:0 0 12px #55dba830}
+#groupLayer{position:absolute;inset:15px 12px 37px;pointer-events:none}
+.mergeDivider{position:absolute;top:0;bottom:0;border-left:2px solid #ffd08a;filter:drop-shadow(0 0 5px #ffb85a55);z-index:4}
+.mergeDivider:before{content:"LEFT RUN";position:absolute;top:-17px;left:4px;color:#ffc77f;font-size:9px;font-weight:800;letter-spacing:.1em;white-space:nowrap}
+.mergeDivider:after{content:"RIGHT RUN";position:absolute;top:-17px;left:5px;color:#8ad9ff;font-size:9px;font-weight:800;letter-spacing:.1em;white-space:nowrap}
+.mergeDivider .rightLabel{position:absolute;top:-17px;left:5px;color:#8ad9ff;font-size:9px;font-weight:800;letter-spacing:.1em;white-space:nowrap}
+.mergeBoundary{position:absolute;top:0;bottom:0;border-left:2px solid #ffd08a;z-index:5;pointer-events:none}
+.runTag{position:absolute;top:-18px;font-size:9px;font-weight:800;letter-spacing:.1em;white-space:nowrap;padding:1px 4px;border-radius:4px;background:#15233a}
+.runTag.left{color:#ffc77f;transform:translateX(-100%);left:-3px}
+.runTag.right{color:#8ad9ff;left:4px}
+.groupBox{position:absolute;border:1px dashed #597397;border-radius:9px;background:#1d385410;transition:all .25s}.groupBox.active{border-color:var(--orange);background:#ffb15a12}.groupLabel{position:absolute;top:-18px;left:3px;font-size:10px;color:#93a8c8;white-space:nowrap}
+.log{display:flex;gap:10px;align-items:flex-start;margin-top:13px;min-height:60px}.logIcon{width:32px;height:32px;display:grid;place-items:center;border-radius:9px;background:#1b2c47;color:var(--cyan);font-weight:800;flex:0 0 32px}.logTitle{font-weight:650}.logSub{font-size:13px;color:var(--muted);margin-top:3px}
+.bottom{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.miniTitle{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);margin:0 0 8px}.cells{display:flex;gap:5px;flex-wrap:wrap;min-height:32px}.cell{font:12px ui-monospace,monospace;padding:5px 8px;border:1px solid #2b3e5c;border-radius:7px;background:#18243a;color:#cbd9f1}.cell.hot{border-color:var(--orange);color:var(--orange)}.cell.sortedCell{border-color:#39b789;color:#8ce8c5}
+@media(max-width:700px){main{padding:16px 10px}.card{padding:12px}.bottom{grid-template-columns:1fr}.stats{margin-left:0}#stage{height:300px;padding:28px 7px 40px}.bar{width:100%}.value{font-size:9px;top:-19px}}
+</style>
+</head>
+<body><main>
+<header class="top"><div><div class="eyebrow">Algorithm Playground · Sorting</div><h1 class="title">Merge Sort</h1><p class="subtitle">Keep every element in view as recursive groups split and merge.</p></div><span class="pill" id="phase">READY · O(n log n)</span></header>
+<section class="card">
+<div class="controls">
+<button class="btn primary" id="play">▶ Play</button><button class="btn" id="step">Step →</button><button class="btn" id="reset">↻ Reset</button><button class="btn" id="newArray">⤨ New array</button>
+<label class="control">Elements <input id="count" type="range" min="12" max="36" value="24"><b id="countLabel">24</b></label>
+<label class="control">Speed <input id="speed" type="range" min="1" max="5" value="3"><span id="speedLabel">Normal</span></label>
+</div>
+<div class="status"><span id="status">Ready. All elements stay visible during the divide phase.</span><div class="stats"><span class="pill" id="stepStat">Step 0</span><span class="pill" id="cmpStat">Comparisons 0</span></div></div>
+<div class="card stageCard"><div class="stageHead"><h2>Array visualization · fixed full-width layout</h2><div class="legend"><span><i class="dot" style="background:#4eb4f5"></i>Unsorted</span><span><i class="dot" style="background:#f4a65b"></i>Compare</span><span><i class="dot" style="background:#e45ca7"></i>Selected</span><span><i class="dot" style="background:#49c994"></i>Sorted run</span></div></div>
+<div id="stage"><div id="groupLayer"></div><div id="bars"></div></div></div>
+<div class="log"><div class="logIcon" id="logIcon">i</div><div><div class="logTitle" id="logTitle">Array generated</div><div class="logSub" id="logSub">Bars are anchored to their original index positions. Recursive groups will be outlined without hiding or removing any element.</div></div></div>
+<div class="bottom"><div><p class="miniTitle">Current range / values</p><div class="cells" id="current"></div></div><div><p class="miniTitle">Merge output (active run)</p><div class="cells" id="output"><span class="cell">Waiting for merge…</span></div></div></div>
+</section></main>
+<script>
+
+const $=id=>document.getElementById(id);
+let original=[],frames=[],cursor=0,playing=false,timer=null;
+function randomValues(n){return Array.from({length:n},()=>Math.floor(Math.random()*90)+10)}
+function traceMergeSort(input){
+ const slots=input.map(v=>({v})),trace=[];let comparisons=0;
+ const snapshot=()=>slots.map(x=>x.v);
+ function emit(type,title,detail,lo,hi,level,highlight=[],out=[],target=-1){
+  trace.push({type,title,detail,lo,hi,level,highlight,out:out.slice(),target,mid:-1,working:snapshot(),comparisons});
+ }
+ function sort(lo,hi,level){
+  if(hi-lo<=1){emit('leaf',`Single item: ${slots[lo].v}`,'A one-element run is already sorted.',lo,hi,level,[lo]);return slots.slice(lo,hi)}
+  const mid=Math.floor((lo+hi)/2);
+  emit('divide',`Divide [${lo}–${hi-1}]`,`Split into [${lo}–${mid-1}] and [${mid}–${hi-1}]. All bars stay visible.`,lo,hi,level);
+  const left=sort(lo,mid,level+1),right=sort(mid,hi,level+1);
+  emit('mergeBegin',`Merge [${left.map(x=>x.v)}] + [${right.map(x=>x.v)}]`,'Both child runs are sorted; merge into this parent range in ascending order.',lo,hi,level);trace[trace.length-1].mid=mid;
+  let i=0,j=0,out=[];
+  while(i<left.length&&j<right.length){
+   comparisons++;const lp=lo+i,rp=mid+j;
+   emit('compare',`Compare ${left[i].v} vs ${right[j].v}`,left[i].v<=right[j].v?`Select ${left[i].v} from the left run.`:`Select ${right[j].v} from the right run.`,lo,hi,level,[lp,rp],out.map(x=>x.v),lo+out.length);trace[trace.length-1].mid=mid;
+   const chosen=left[i].v<=right[j].v?left[i++]:right[j++];out.push(chosen);
+   const remaining=left.slice(i).concat(right.slice(j)),next=out.concat(remaining);
+   for(let k=0;k<next.length;k++)slots[lo+k]=next[k];
+   emit('place',`Place ${chosen.v} at slot ${lo+out.length-1}`,`Sorted output prefix: [${out.map(x=>x.v).join(', ')}].`,lo,hi,level,[lo+out.length-1],out.map(x=>x.v),lo+out.length-1);trace[trace.length-1].mid=mid;
+  }
+  if(i<left.length||j<right.length){
+   const remaining=left.slice(i).concat(right.slice(j));out=out.concat(remaining);
+   for(let k=0;k<out.length;k++)slots[lo+k]=out[k];
+   emit('append',`Append remaining: ${remaining.map(x=>x.v).join(', ')}`,'Copy the remaining elements—they are already sorted within their run.',lo,hi,level,[],out.map(x=>x.v),lo+out.length-remaining.length);trace[trace.length-1].mid=mid;
+  }
+  for(let k=0;k<out.length;k++)slots[lo+k]=out[k];
+  emit('merged',`Sorted run: [${out.map(x=>x.v).join(', ')}]`,'This entire parent run is now sorted before returning to the next recursion level.',lo,hi,level,[],out.map(x=>x.v),lo);trace[trace.length-1].mid=mid;
+  return out;
+ }
+ sort(0,slots.length,0);
+ emit('complete','Array fully sorted','Every merge placed values in ascending order. Final array is sorted.',0,slots.length,0,[],slots.map(x=>x.v),0);
+ return trace;
+}
+function render(f=null){
+ const bars=$('bars'),groups=$('groupLayer');bars.innerHTML='';groups.innerHTML='';bars.style.setProperty('--n',original.length);
+ const state=f?.working||original,max=Math.max(...original),n=original.length;
+ state.forEach((v,index)=>{
+  const slot=document.createElement('div');slot.className='barSlot';
+  const bar=document.createElement('div');bar.className='bar';bar.style.height=(v/max*88+4)+'%';
+  if(f?.highlight?.includes(index))bar.classList.add(f.type==='compare'?'compare':'moving');
+  if(f&&['merged','complete'].includes(f.type)&&index>=f.lo&&index<f.hi)bar.classList.add('sorted');
+  if(f&&['place','append'].includes(f.type)&&index>=f.lo&&index<f.target)bar.classList.add('sorted');
+  const label=document.createElement('span');label.className='value';label.textContent=v;bar.appendChild(label);
+  const ix=document.createElement('span');ix.className='index';ix.textContent=index;slot.append(bar,ix);bars.appendChild(slot);
+ });
+ if(f && f.mid>=0 && ['mergeBegin','compare','place','append','merged'].includes(f.type)){
+  const divider=document.createElement('div');divider.className='mergeBoundary';
+  const splitPct=(f.mid/n)*100;divider.style.left=`calc(${splitPct}% - 1px)`;groups.appendChild(divider);
+  const leftTag=document.createElement('span');leftTag.className='runTag left';leftTag.textContent='LEFT RUN';leftTag.style.left=`calc(${splitPct}% - 5px)`;leftTag.style.top='-16px';groups.appendChild(leftTag);
+  const rightTag=document.createElement('span');rightTag.className='runTag right';rightTag.textContent='RIGHT RUN';rightTag.style.left=`calc(${splitPct}% + 5px)`;rightTag.style.top='-16px';groups.appendChild(rightTag);
+ }
+ if(f){
+  const lo=f.lo,hi=f.hi,step=100/n,box=document.createElement('div');box.className='groupBox active';
+  box.style.left=`calc(${lo*step}% + ${lo===0?0:1}px)`;box.style.width=`calc(${(hi-lo)*step}% - 2px)`;
+  box.style.top=`${Math.min(20+f.level*31,185)}px`;box.style.height=`${Math.max(34,100-f.level*5)}px`;
+  const label=document.createElement('span');label.className='groupLabel';label.textContent=`Level ${f.level+1} · [${lo}–${hi-1}]`;box.appendChild(label);groups.appendChild(box);
+ }
+ $('current').innerHTML='';state.forEach((v,i)=>{const c=document.createElement('span');c.className='cell';c.textContent=v;if(f?.highlight?.includes(i))c.classList.add('hot');if(f&&['place','append','merged','complete'].includes(f.type)&&i>=f.lo&&i<f.target)c.classList.add('sortedCell');$('current').appendChild(c)});
+ $('output').innerHTML='';(f?.out||[]).forEach(v=>{const c=document.createElement('span');c.className='cell sortedCell';c.textContent=v;$('output').appendChild(c)});if(!f?.out?.length)$('output').innerHTML='<span class="cell">—</span>';
+}
+function show(f){render(f);$('status').textContent=f.title;$('logTitle').textContent=f.title;$('logSub').textContent=f.detail;$('logIcon').textContent=f.type==='divide'?'÷':f.type==='compare'?'⇄':f.type==='place'?'↘':f.type==='complete'?'✓':'•';$('phase').textContent=['divide','leaf'].includes(f.type)?'DIVIDING':f.type==='compare'?'COMPARING':['place','append','merged'].includes(f.type)?'MERGING':f.type==='complete'?'COMPLETE':'MERGE SORT';$('stepStat').textContent=`Step ${cursor+1} / ${frames.length}`;$('cmpStat').textContent=`Comparisons ${f.comparisons}`}
+function init(){original=randomValues(+$('count').value);frames=traceMergeSort(original);cursor=0;render();$('status').textContent='Ready. Step through comparisons and sorted placements.';$('logTitle').textContent='Array generated';$('logSub').textContent='Bars remain visible; each merge places elements into sorted output positions.';$('phase').textContent='READY · O(n log n)';$('stepStat').textContent=`Step 0 / ${frames.length}`;$('cmpStat').textContent='Comparisons 0';$('output').innerHTML='<span class="cell">Waiting for merge…</span>'}
+function step(){if(cursor>=frames.length){stop();return}show(frames[cursor]);cursor++;if(cursor>=frames.length){playing=false;$('play').textContent='▶ Play'}}
+function stop(){playing=false;clearTimeout(timer);timer=null;$('play').textContent='▶ Play'}
+function delay(){return [1000,750,500,300,150][+$('speed').value-1]}
+function play(){if(playing){stop();return}playing=true;$('play').textContent='❚❚ Pause';function tick(){if(!playing)return;if(cursor>=frames.length){stop();return}step();if(playing)timer=setTimeout(tick,delay())}tick()}
+$('play').onclick=play;$('step').onclick=()=>{stop();step()};$('reset').onclick=()=>{stop();init()};$('newArray').onclick=()=>{stop();init()};$('count').oninput=()=>{$('countLabel').textContent=$('count').value;stop();init()};$('speed').oninput=()=>{$('speedLabel').textContent=['Slow','Leisurely','Normal','Fast','Turbo'][+$('speed').value-1]};init();
+
+</script></body></html>
